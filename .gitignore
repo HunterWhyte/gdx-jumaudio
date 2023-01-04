@@ -1,0 +1,16 @@
+*.mp3
+*.flac
+*.wav
+*.ogg
+jni
+build
+.vscode
+.clang-format
+*.class
+*.war
+*.ear
+hs_err_pid*
+/local.properties
+.gradle/
+gradle-app.setting
+build.sh

@@ -1,0 +1,3 @@
+[submodule "jumaudio"]
+	path = jumaudio
+	url = git@github.com:HunterWhyte/jumaudio.git

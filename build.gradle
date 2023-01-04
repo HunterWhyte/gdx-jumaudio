@@ -1,0 +1,71 @@
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+    }
+    dependencies {
+        classpath "com.badlogicgames.gdx:gdx-jnigen-gradle:2.2.0"
+    }
+}
+
+apply plugin: "java-library"
+apply plugin: "maven"
+apply plugin: "eclipse"
+apply plugin: "idea"
+
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    google()
+    gradlePluginPortal()
+    maven { url "https://oss.sonatype.org/content/repositories/snapshots/" }
+    maven { url "https://oss.sonatype.org/content/repositories/releases/" }
+    maven {url 'https://jitpack.io' }
+}
+
+ext {
+    gdxVersion = '1.10.0'
+}
+
+dependencies {
+    api "com.badlogicgames.gdx:gdx-jnigen-loader:2.3.1"
+    api "com.badlogicgames.gdx:gdx-jnigen:2.3.1"
+
+    runtime fileTree(dir: 'build/libs', include: '*.jar')
+    implementation "com.badlogicgames.gdx:gdx:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+
+apply plugin: "com.badlogicgames.gdx.gdx-jnigen"
+
+jnigen {
+    sharedLibName = "gdx-jumaudio"
+
+    all {
+        cFlags += " -lm -ldl "
+        cIncludes = ["jumaudio.h", "pffft/pffft.c", "pffft/pffft.h", "miniaudio/miniaudio.h"]
+
+    }
+
+// todo add other platforms :(
+    add(Windows, x32)
+	add(Windows, x64)
+    add(Linux, x64)
+}
+
+jar {
+    baseName = "gdx-jumaudio"
+    from fileTree("libs").files
+}
+
+sourceCompatibility = 15
+sourceSets.main.java.srcDirs = [ "src/" ]
+
+task run(dependsOn: classes, type: JavaExec) {
+    main = "com.HunterWhyte.jumaudio.JumAudio"
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+    ignoreExitValue = true
+}
