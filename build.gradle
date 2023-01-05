@@ -44,15 +44,15 @@ jnigen {
     sharedLibName = "gdx-jumaudio"
 
     all {
-        cFlags += " -lm -ldl "
-        cIncludes = ["jumaudio.h", "pffft/pffft.c", "pffft/pffft.h", "miniaudio/miniaudio.h"]
-
+        headerDirs = ["../jumaudio"]
+        cFlags += " -g -fPIC "
+        libraries += " -lm -ldl "
     }
 
-// todo add other platforms :(
-    add(Windows, x32)
-	add(Windows, x64)
-    add(Linux, x64)
+    // todo add other platforms :(
+    add(Linux, x64) {
+        libraries += "-Wl,-whole-archive " + file("jumaudio/build/Linuxx86_64/libjumaudio.a").absolutePath + " -Wl,-no-whole-archive"
+    }
 }
 
 jar {

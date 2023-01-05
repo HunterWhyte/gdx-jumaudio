@@ -57,9 +57,7 @@ public class JumAudio {
         System.out.println(add(1, 2));
         JumAudio audio = new JumAudio();
         audio.jniInitAudio(FFT_BUF_SIZE * (PREDECODE_BUFS + 5), PREDECODE_BUFS, FFT_BUF_SIZE);
-        audio.jniInitFFT();
         System.out.println(audio.jniStartPlayback("/home/hunter/Music/test.flac"));
-
         Thread.sleep(100000);
     }
 }
