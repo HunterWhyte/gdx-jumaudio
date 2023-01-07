@@ -1,4 +1,4 @@
-package com.HunterWhyte.jumaudio;
+package com.jum.jumaudio;
 
 import java.io.FileNotFoundException;
 import java.security.InvalidParameterException;
@@ -239,6 +239,17 @@ public class JumAudio implements Disposable{
         return jniGetCursor();
     }
 
+    private native float jniGetLevel();/*
+    if(fft != NULL){
+        return fft->level;
+    } else {
+        return 0;
+    }
+    */
+    public float getLevel(){
+        return jniGetLevel();
+    }
+
     private native void jniPausePlayback();/*
         return jum_pausePlayback(audio);
     */
@@ -269,24 +280,23 @@ public class JumAudio implements Disposable{
         }
     }
 
+    // public static void main (String[] args) throws Exception {
+    //     JumAudio audio = new JumAudio();
+    //     audio.initFFT();
+    //     for(PlaybackDevice p : audio.playback_devices){
+    //         System.out.println(p.name);
+    //     }
+    //     for(CaptureDevice c : audio.capture_devices){
+    //         System.out.println(c.name);
+    //     }
 
-    public static void main (String[] args) throws Exception {
-        JumAudio audio = new JumAudio();
-        audio.initFFT();
-        for(PlaybackDevice p : audio.playback_devices){
-            System.out.println(p.name);
-        }
-        for(CaptureDevice c : audio.capture_devices){
-            System.out.println(c.name);
-        }
-
-        audio.startPlayback("/home/hunter/Music/test.flac");
-        audio.setAmplitude(0.3f);
-        // audio.startCapture();
-        for(int i = 0; i < 1000; i++){
-            Thread.sleep(16, 0);
-            audio.analyzeFFT(16);
-        }
-        audio.dispose();
-    }
+    //     audio.startPlayback("/home/hunter/Music/test.flac");
+    //     audio.setAmplitude(0.3f);
+    //     // audio.startCapture();
+    //     for(int i = 0; i < 1000; i++){
+    //         Thread.sleep(16, 0);
+    //         audio.analyzeFFT(16);
+    //     }
+    //     audio.dispose();
+    // }
 }

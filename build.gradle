@@ -64,8 +64,23 @@ sourceCompatibility = 15
 sourceSets.main.java.srcDirs = [ "src/" ]
 
 task run(dependsOn: classes, type: JavaExec) {
-    main = "com.HunterWhyte.jumaudio.JumAudio"
+    main = "com.jum.jumaudio.JumAudio"
     classpath = sourceSets.main.runtimeClasspath
     standardInput = System.in
     ignoreExitValue = true
+}
+
+apply plugin: 'maven-publish'
+
+project.afterEvaluate {
+    publishing {
+        publications {
+            library(MavenPublication) {
+                groupId = 'com.jum'
+                artifactId = 'gdx-jumaudio'
+                version = "0.1"
+                from components.java
+            }
+        }
+    }
 }
