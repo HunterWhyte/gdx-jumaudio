@@ -114,6 +114,7 @@ public class JumAudio implements Disposable{
                 return i;
             }
         }
+        return 0;
     */
     private native int jniGetDefaultPlaybackIndex();/*
         for (ma_uint32 i = 0; i < audio->playback_device_count; i++) {
@@ -121,6 +122,7 @@ public class JumAudio implements Disposable{
                 return i;
             }
         }
+        return 0;
     */
     private void getDevices(){
         // get enumerated capture and playback devices
