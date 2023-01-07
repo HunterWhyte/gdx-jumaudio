@@ -15,19 +15,21 @@ public class JumAudio implements Disposable{
     public static class AudioDevice{
         public String name;
         protected int index;
-        public AudioDevice(String name, int index){
+        public boolean is_default;
+        public AudioDevice(String name, int index, boolean is_default){
             this.name = name;
             this.index = index;
+            this.is_default = is_default;
         }
     }
     public static class CaptureDevice extends AudioDevice{
-        public CaptureDevice(String name, int index) {
-            super(name, index);
+        public CaptureDevice(String name, int index, boolean is_default) {
+            super(name, index, is_default);
         }
     }
     public static class PlaybackDevice extends AudioDevice{
-        public PlaybackDevice(String name, int index) {
-            super(name, index);
+        public PlaybackDevice(String name, int index, boolean is_default) {
+            super(name, index, is_default);
         }
     }
 
@@ -106,6 +108,20 @@ public class JumAudio implements Disposable{
             env->SetObjectArrayElement(playback_devices, i, env->NewStringUTF(audio->playback_device_info[i].name));
         }
     */
+    private native int jniGetDefaultCaptureIndex();/*
+        for (ma_uint32 i = 0; i < audio->capture_device_count; i++) {
+            if (audio->capture_device_info[i].isDefault) {
+                return i;
+            }
+        }
+    */
+    private native int jniGetDefaultPlaybackIndex();/*
+        for (ma_uint32 i = 0; i < audio->playback_device_count; i++) {
+            if (audio->playback_device_info[i].isDefault) {
+                return i;
+            }
+        }
+    */
     private void getDevices(){
         // get enumerated capture and playback devices
         num_capture_devices = jniGetNumCaptureDevices();
@@ -115,17 +131,20 @@ public class JumAudio implements Disposable{
         capture_devices = new ArrayList<>(num_capture_devices);
         playback_devices = new ArrayList<>(num_playback_devices);
         jniGetAudioDevices(capture_device_names, playback_device_names);
+        int default_capture = jniGetDefaultCaptureIndex();
+        int default_playback = jniGetDefaultPlaybackIndex();
         for(int i = 0; i < num_capture_devices; i++){
-            capture_devices.add(new CaptureDevice(capture_device_names[i], i));
+            capture_devices.add(new CaptureDevice(capture_device_names[i], i, (i==default_capture)));
         }
         for(int i = 0; i < num_playback_devices; i++){
-            playback_devices.add(new PlaybackDevice(playback_device_names[i], i));
+            playback_devices.add(new PlaybackDevice(playback_device_names[i], i, (i==default_playback)));
         }
     }
 
     
 
     private native int jniStartPlayback(String filepath, int device_index);/*
+        fft->max = 2.5; // reset normalization of fft
         return jum_startPlayback(audio, filepath, device_index);
     */
     public void startPlayback(String filepath, PlaybackDevice device) throws FileNotFoundException, IllegalStateException{
@@ -147,6 +166,7 @@ public class JumAudio implements Disposable{
 
 
     private native int jniStartCapture(int device_index);/*
+        fft->max = 2.5; // reset normalization of fft
         return jum_startCapture(audio, device_index);
     */
     public void startCapture(CaptureDevice device) throws IllegalStateException{
@@ -262,6 +282,10 @@ public class JumAudio implements Disposable{
     */
     public void resume(){
         jniResumePlayback();
+    }
+
+    public int getNumBins(){
+        return num_bins;
     }
 
     private native void jniDisposeAudio();/*
