@@ -12,6 +12,11 @@ public class JumAudio implements Disposable{
         new SharedLibraryLoader().load("gdx-jumaudio");
     }
 
+    public static enum FFT_INPUT_MODE{
+        NONE,
+        PLAYBACK,
+        CAPTURE
+    }
     public static class Sound{
         public String filepath;
         protected int handle;
@@ -50,11 +55,6 @@ public class JumAudio implements Disposable{
 
     jum_AudioSetup* audio;
     jum_FFTSetup* fft;
-    ma_engine* engine;
-    ma_uint32 engine_started = 0;
-    ma_sound sounds[MAX_SOUNDS];
-    ma_int32 num_sounds;
-    const char* stream_name = "jum";
     */
     
     // fft + filtering parameters with some default values.
@@ -87,7 +87,8 @@ public class JumAudio implements Disposable{
     private int num_playback_devices;
 
     public ArrayList<Sound> sounds = new ArrayList<>();
-    private float engine_volume = 1F;
+
+    public float repeat_delay = 0.05F;
 
     private native int jniInitAudio(int buffer_size, int predecode_bufs, int period);/*
         audio = jum_initAudio(buffer_size, predecode_bufs, period);
@@ -162,182 +163,118 @@ public class JumAudio implements Disposable{
         }
     }
 
-    private native int jniStartEngine(int device_index); /*
-        ma_engine_config config;
-        config = ma_engine_config_init();
-        config.pContext = &audio->context;
-        config.pulse.pStreamNamePlayback = stream_name;
-        engine = (ma_engine*)malloc(sizeof(ma_engine));
-        if(device_index != -1){
-            config.pPlaybackDeviceID = &audio->playback_device_info[device_index].id;
-        }
-        
-        if (ma_engine_init(&config, engine) != MA_SUCCESS) {
-            printf("Failed to initialize audio engine.");
-            return -1;
-        }
-        return 0;
-    */
-    public void startEngine(PlaybackDevice device) throws IllegalStateException, FileNotFoundException{
-        // make sure audio context hasnt been disposed
-        if(!audio_initialized){
-            throw new IllegalStateException("Started engine without initialized audio context");
-        }
-        if(engine_initialized){
-            jniClearSounds();
-            jniDisposeEngine();
-            engine_initialized = false;
-        }
-        int index = -1;
-        if(playback_devices.contains(device)){
-            index = device.index;
-        }
-        if(jniStartEngine(index) != 0){
-            throw new IllegalStateException("Could not start engine for device " + device.name);
-        }
-        engine_initialized = true;
-
-        for(Sound s : sounds){
-            if(s!=null){
-                int result = jniLoadSound(s.filepath);
-                if(result == -1){
-                    throw new FileNotFoundException("could not find file for sound: " + s.filepath);
-                } else{
-                    s.handle = result;
-                }
-            }
-        }
-        jniSetEngineVolume(engine_volume);
-    }
-
     private native void jniClearSounds();/*
-        for(ma_int32 i = 0; i<num_sounds; i++){
-            ma_sound_uninit(&sounds[i]);
-        }
-        num_sounds = 0;
+        jum_clearSoundFiles(audio);
     */
     public void clearSounds(){
         sounds.clear();
         jniClearSounds();
     }
 
-    private native void jniDisposeEngine(int device_index); /*
-        ma_device* device = ma_engine_get_device(engine);
-        ma_engine_stop(engine);
-        ma_engine_uninit(engine);
-        ma_device_uninit(device);
-        free(engine);
-        engine=NULL;
-    */
-
     // returns index into sounds array as sound handle
     private native int jniLoadSound(String filepath); /*
-        if(num_sounds >= MAX_SOUNDS){
-            return -1;
-        }
-        ma_result result;
-        result = ma_sound_init_from_file(engine, filepath, MA_SOUND_FLAG_ASYNC, NULL, NULL, &sounds[num_sounds]);
-        if (result != MA_SUCCESS) {
-            return -1;  // Failed to load sound.
-        }
-        num_sounds++;
-        return num_sounds - 1;
+        return jum_loadSound(audio, filepath);
     */
-    public Sound loadSound(String filepath) throws FileNotFoundException{
-        Sound s;
-        if(engine_initialized){
-            int result = jniLoadSound(filepath);
-            if(result == -1){
-                throw new FileNotFoundException("could not find file for sound: " + filepath);
-            }
-            s = new Sound(filepath, result); 
-            sounds.add(s);
-        } else{
-            s = new Sound(filepath, -1); 
-            sounds.add(s);
+    public Sound loadSound(String filepath) throws IllegalStateException, FileNotFoundException{
+        Sound s = null;
+        if(!audio_initialized){
+            throw new IllegalStateException("attempting to load sound file before initializing audio context: " + filepath);
         }
+        int result = jniLoadSound(filepath);
+        if(result < 0){
+            throw new FileNotFoundException("could load sound file: " + filepath);
+        }
+        s = new Sound(filepath, result); 
+        sounds.add(s);
         return s;
     }
 
-    private native int jniPlaySound(int sound_handle);/*
-        float cursor;
-        if(sound_handle < 0 || sound_handle > num_sounds){
-            return -1;
-        }
-        if (ma_sound_is_playing(&sounds[sound_handle])){
-            ma_sound_get_cursor_in_seconds(&sounds[sound_handle], &cursor);
-            if(cursor>0.1){ // prevent from replaying too fast
-                ma_sound_seek_to_pcm_frame(&sounds[sound_handle], 0);
-            }
+    private native int jniPlaySound(int sound_handle, float repeat_delay);/*
+        return jum_playSound(audio, sound_handle, repeat_delay);
+    */
+    public void playSound(Sound sound) throws IllegalStateException{
+        if(audio_initialized && sounds.contains(sound)){
+            jniPlaySound(sound.handle, repeat_delay);
         } else {
-            ma_sound_start(&sounds[sound_handle]);
-        }
-        return 0;
-    */
-    public void playSound(Sound sound){
-        if(engine_initialized && sounds.contains(sound)){
-            jniPlaySound(sound.handle);
-        }
-    }
-
-    private native void jniSetEngineVolume(float volume);/*
-        ma_engine_set_volume(engine, volume);
-    */
-    public void setSoundVolume(float volume){
-        if(volume < 0)
-            volume = 0;
-        else if(volume > 1)
-            volume = 1;
-
-        engine_volume = volume;
-
-        if(engine_initialized){
-            jniSetEngineVolume(volume);
+            throw new IllegalStateException("could not play sound " + sound.filepath);
         }
     }
 
 
-    private native int jniStartPlayback(String filepath, int device_index);/*
-        fft->max = 2.5; // reset normalization of fft
-        return jum_startPlayback(audio, filepath, device_index);
+    private native int jniplaySong(String filepath);/*
+        if(fft!=NULL)
+            fft->max = 2.5; // reset normalization of fft
+        return jum_playSong(audio, filepath);
     */
-    public void startPlayback(String filepath, PlaybackDevice device) throws FileNotFoundException, IllegalStateException{
+    public void playSong(String filepath) throws FileNotFoundException, IllegalStateException{
+        if(!audio_initialized){
+            throw new IllegalStateException("Attempted to play song without initialized audio context");
+        }
+        int result = jniplaySong(filepath);
+        if(jniplaySong(filepath) != 0){
+            throw new FileNotFoundException("Could not start playback for file " + filepath);
+        }
+    }
+
+    private native int jniOpenPlaybackDevice(int device_index);/*
+        if(fft!=NULL)
+            fft->max = 2.5; // reset normalization of fft
+        return jum_openPlaybackDevice(audio, device_index);
+    */
+    public void openPlaybackDevice(PlaybackDevice device) throws IllegalStateException{
         // make sure audio hasnt been disposed
         if(!audio_initialized){
-            throw new IllegalStateException("Audio playback without initialized audio context");
+            throw new IllegalStateException("Audio playback opened without initialized audio context");
         }
+
         int index = -1;
         if(playback_devices.contains(device)){
             index = device.index;
         }
-        if(jniStartPlayback(filepath, index) != 0){
-            throw new FileNotFoundException("Could not start playback for file " + filepath);
+        if(jniOpenPlaybackDevice(index) != 0){
+            throw new IllegalStateException("Could not start audio playback");
         }
     }
-    public void startPlayback(String filepath) throws FileNotFoundException, IllegalStateException{
-        startPlayback(filepath, null);
+    public void openPlaybackDevice() throws IllegalStateException{
+        openPlaybackDevice(null);
     }
 
 
-    private native int jniStartCapture(int device_index);/*
-        fft->max = 2.5; // reset normalization of fft
-        return jum_startCapture(audio, device_index);
+    private native int jniOpenCaptureDevice(int device_index);/*
+        if(fft!=NULL)
+            fft->max = 2.5; // reset normalization of fft
+        return jum_openCaptureDevice(audio, device_index);
     */
-    public void startCapture(CaptureDevice device) throws IllegalStateException{
+    public void openCaptureDevice(CaptureDevice device) throws IllegalStateException{
         // make sure audio hasnt been disposed
         if(!audio_initialized){
             throw new IllegalStateException("Audio capture without initialized audio context");
         }
+
         int index = -1;
         if(capture_devices.contains(device)){
             index = device.index;
         }
-        if(jniStartCapture(index) != 0){
+        if(jniOpenCaptureDevice(index) != 0){
             throw new IllegalStateException("Could not start audio capture");
         }
     }
-    public void startCapture() throws IllegalStateException{
-        startCapture(null);
+    public void openCaptureDevice() throws IllegalStateException{
+        openCaptureDevice(null);
+    }
+
+
+    private native void jniSetFFTInputMode(int mode);/*
+        jum_AudioMode jum_mode = AUDIO_MODE_NONE;
+        if(mode==1)
+            jum_mode = AUDIO_MODE_PLAYBACK;
+        else if(mode ==2)
+            jum_mode = AUDIO_MODE_CAPTURE;
+
+        jum_setFFTMode(audio, jum_mode);
+    */
+    public void setFFTInputMode(FFT_INPUT_MODE mode){
+        jniSetFFTInputMode(mode.ordinal());
     }
 
     private native void jniInitFFT(float[][] freqs, int num_freqs, float[][] weights, int num_weights, int fft_buf_size, int num_bins); /*
@@ -399,18 +336,45 @@ public class JumAudio implements Disposable{
         jniAnalyzeFFT(this.fft_result, this.fft_raw, msec);
     }
 
-    private native void jniSetAmplitude(float amplitude);/*
-        jum_setAmplitude(audio, amplitude);
+    private native void jniSetMusicVolume(float volume);/*
+        jum_setMusicVolume(audio, volume);
     */
     public void setMusicVolume(float volume){
-        jniSetAmplitude(volume);
+        jniSetMusicVolume(volume);
     }
 
-    private native float jniGetCursor();/*
-        return jum_getCursor(audio);
+    private native void jniSetOtherVolume(float volume);/*
+        jum_setOtherVolume(audio, volume);
     */
-    public float getCursor(){
-        return jniGetCursor();
+    public void setOtherVolume(float volume){
+        jniSetOtherVolume(volume);
+    }
+
+    private native float jniGetSongCursor();/*
+        return jum_getSongCursor(audio);
+    */
+    public float getSongCursor(){
+        if(!audio_initialized){
+            return 0;
+        }
+        return jniGetSongCursor();
+    }
+
+    private native float jniGetSongLength();/*
+    return jum_getSongLength(audio);
+    */
+    public float getSongLength(){
+        if(!audio_initialized){
+            return 0;
+        }
+        return jniGetSongLength();
+    }
+
+    private native boolean jniSongFinished();/*
+        return jum_isSongFinished(audio);
+    */
+    public boolean songFinished(){
+        return jniSongFinished();
     }
 
     private native float jniGetLevel();/*
@@ -424,26 +388,23 @@ public class JumAudio implements Disposable{
         return jniGetLevel();
     }
 
-    private native void jniPausePlayback();/*
-        return jum_pausePlayback(audio);
+    private native void jniPauseSong();/*
+        jum_pauseSong(audio);
     */
     public void pause(){
-        jniPausePlayback();
+        jniPauseSong();
     }
-
-    private native void jniResumePlayback();/*
-        return jum_resumePlayback(audio);
+    private native void jniResumeSong();/*
+        jum_resumeSong(audio);
     */
     public void resume(){
-        jniResumePlayback();
+        jniResumeSong();
     }
 
     public int getNumBins(){
         return num_bins;
     }
 
-    private native void jniDisposeEngine();/*
-    */
     private native void jniDisposeAudio();/*
         jum_deinitAudio(audio);
     */
@@ -452,11 +413,7 @@ public class JumAudio implements Disposable{
     */
     @Override
     public void dispose() {
-        if(engine_initialized){
-            sounds.clear();
-            jniClearSounds();
-            jniDisposeEngine();
-        }
+        clearSounds();
         if(audio_initialized){
             jniDisposeAudio();
         }
